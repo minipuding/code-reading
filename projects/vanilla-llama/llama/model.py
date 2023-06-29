@@ -194,22 +194,6 @@ class TransformerBlock(nn.Module):
         return out
 
 
-def convert_linear_to_bnb(float_linear):
-    new_layer = InferenceQuantizedLinear(
-        float_linear.in_features,
-        float_linear.out_features,
-        bias=float_linear.bias is not None,
-    )
-    new_layer._parameters["weight"] = bnb.nn.Int8Params(
-        float_linear.weight.data.cpu(),
-        requires_grad=False,
-        has_fp16_weights=False,
-    )
-    if float_linear.bias is not None:
-        new_layer._parameters["bias"] = float_linear.bias
-    return new_layer
-
-
 class Transformer(nn.Module):
     def __init__(self, params: ModelArgs):
         super().__init__()

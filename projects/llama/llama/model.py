@@ -19,6 +19,14 @@ from fairscale.nn.model_parallel.layers import (
 
 @dataclass
 class ModelArgs:
+    """
+    对于7B模型:
+    dim = 4096
+    n_layers = 32
+    n_heads = 32
+    multiple_of = 256
+    norm_eps = 1e-6
+    """
     dim: int = 512
     n_layers: int = 8
     n_heads: int = 8
@@ -31,6 +39,12 @@ class ModelArgs:
 
 
 class RMSNorm(torch.nn.Module):
+    """
+    相比于普通的norm, RMSNorm把减均值这一步去除。
+    作者认为这种模式在简化了Layer Norm的同时, 可以在各个模型上减少约 7%~64% 的计算时间。
+    RMSNorm = x / RMS(x)
+    RMS(x) = sqrt(mean(x ** 2))
+    """
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
@@ -45,9 +59,22 @@ class RMSNorm(torch.nn.Module):
 
 
 def precompute_freqs_cis(dim: int, end: int, theta: float = 10000.0):
+    """
+    初始化频率(旋转角度), 这个和绝对位置编码并无大异, 一个位置对应一个复数相位;
+    巧妙之处在于后面(`apply_rotary_emb`函数)将编码乘进q, k向量, 利用q,k向量在计算内积时相位相减, 
+    产生了`相对位置编码`的效果。
+    dim = self.params.dim // self.params.n_heads = 4096 // 32 = 128, 
+    end = self.params.max_seq_len * 2 = 2048 * 2 = 4096
+    输出freqs_cis是4096 * 64的复数矩阵
+    """
+
+    # freqs.shape = [64]
     freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+    # t.shape = [4096]
     t = torch.arange(end, device=freqs.device)  # type: ignore
+    # 外积,即[4096, 1] x [1, 64]的矩阵乘法, 得到freqs.shape = [4096, 64]
     freqs = torch.outer(t, freqs).float()  # type: ignore
+    # 将极坐标转为复数形式的直角坐标, 设置极径为1(极径不重要), freqs_cis.shape = [4096, 64] complex
     freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # complex64
     return freqs_cis
 
@@ -65,6 +92,9 @@ def apply_rotary_emb(
     xk: torch.Tensor,
     freqs_cis: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    对于每一个head的xq以及xk为128维(dim // n_heads = 4096 // 32 = 128),
+    """
     xq_ = torch.view_as_complex(xq.float().reshape(*xq.shape[:-1], -1, 2))
     xk_ = torch.view_as_complex(xk.float().reshape(*xk.shape[:-1], -1, 2))
     freqs_cis = reshape_for_broadcast(freqs_cis, xq_)

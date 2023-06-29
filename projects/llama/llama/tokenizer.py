@@ -9,7 +9,9 @@ import os
 
 logger = getLogger()
 
-
+## Tokenizer类本质上是为已经做好的分词器包一层皮
+# 作用1：将sentence转为tokens，如"I am LLaMA" -> ["I", "am", "LLaMA"]
+# 作用2：将tokens转为ids，如["I", "am", "LLaMA"] -> [100, 101, 102]
 class Tokenizer:
     def __init__(self, model_path: str):
         # reload tokenizer
@@ -19,8 +21,8 @@ class Tokenizer:
 
         # BOS / EOS token IDs
         self.n_words: int = self.sp_model.vocab_size()
-        self.bos_id: int = self.sp_model.bos_id()
-        self.eos_id: int = self.sp_model.eos_id()
+        self.bos_id: int = self.sp_model.bos_id()  # begin of sentence
+        self.eos_id: int = self.sp_model.eos_id()  # end of sentence
         self.pad_id: int = self.sp_model.pad_id()
         logger.info(
             f"#words: {self.n_words} - BOS ID: {self.bos_id} - EOS ID: {self.eos_id}"
